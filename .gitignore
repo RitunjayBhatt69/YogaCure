@@ -1,0 +1,4 @@
+"venv/" 
+"yoga.db" 
+"*.pyc" 
+"__pycache__/" 
