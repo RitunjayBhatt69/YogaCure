@@ -1,9 +1,11 @@
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 from database import create_connection, create_tables
 import sqlite3
 from sqlite3 import Error
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
      # Initialize database
 create_tables()
