@@ -8,6 +8,11 @@ app = Flask(__name__)
      # Initialize database
 create_tables()
 
+     # Root endpoint for welcome message
+@app.route('/', methods=['GET'])
+def home():
+         return jsonify({"message": "Welcome to YogaCure API! Use /yoga-poses to get yoga poses or /health-plan to create a personalized health plan."}), 200
+
      # Get yoga poses for a health condition
 @app.route('/yoga-poses', methods=['GET'])
 def get_yoga_poses():
@@ -51,7 +56,7 @@ def create_health_plan():
              if not poses:
                  return jsonify({"error": f"No yoga poses found for condition: {condition}"}), 404
 
-             # Fetch diet plan (limit to one day for simplicity)
+             # Fetch diet plan
              cursor.execute('SELECT day, meal_type, meal_description FROM diet_plans WHERE condition = ?', (condition,))
              diet = cursor.fetchall()
              if not diet:
