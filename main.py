@@ -1,90 +1,54 @@
 from flask import Flask, jsonify, request
+from database import create_connection
 from flask_cors import CORS
-from database import create_connection, create_tables
-import sqlite3
-from sqlite3 import Error
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app, resources={r"/*": {"origins": "*"}})  # Allow all origins
 
-     # Initialize database
-create_tables()
-
-     # Root endpoint for welcome message
-@app.route('/', methods=['GET'])
+@app.route('/')
 def home():
-         return jsonify({"message": "Welcome to YogaCure API! Use /yoga-poses to get yoga poses or /health-plan to create a personalized health plan."}), 200
+    return jsonify({"message": "Welcome to YogaCure API! Use /yoga-poses to get yoga poses or /health-plan to create a personalized health plan."})
 
-     # Get yoga poses for a health condition
 @app.route('/yoga-poses', methods=['GET'])
 def get_yoga_poses():
-         condition = request.args.get('condition')
-         if not condition:
-             return jsonify({"error": "Health condition is required"}), 400
+    condition = request.args.get('condition')
+    if not condition:
+        return jsonify({"error": "Condition parameter is required"}), 400
+    condition = condition.lower()  # Normalize to lowercase
+    conn = create_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM yoga_poses WHERE condition = ?", (condition,))
+    poses = cursor.fetchall()
+    conn.close()
+    if not poses:
+        return jsonify({"error": f"No yoga poses found for condition: {condition}"}), 404
+    return jsonify([{"id": p[0], "pose_name": p[2], "description": p[3], "duration_seconds": p[4], "video_url": p[5]} for p in poses])
 
-         conn = create_connection()
-         try:
-             cursor = conn.cursor()
-             cursor.execute('SELECT id, pose_name, description, duration_seconds, video_url FROM yoga_poses WHERE condition = ?', (condition,))
-             poses = cursor.fetchall()
-             if not poses:
-                 return jsonify({"error": f"No yoga poses found for condition: {condition}"}), 404
-             return jsonify([{
-                 "id": pose[0],
-                 "pose_name": pose[1],
-                 "description": pose[2],
-                 "duration_seconds": pose[3],
-                 "video_url": pose[4]
-             } for pose in poses]), 200
-         except Error as e:
-             return jsonify({"error": str(e)}), 500
-         finally:
-             conn.close()
-
-     # Generate personalized health plan (yoga poses and diet)
 @app.route('/health-plan', methods=['POST'])
 def create_health_plan():
-         data = request.get_json()
-         condition = data.get('condition')
-         if not condition:
-             return jsonify({"error": "Health condition is required"}), 400
-
-         conn = create_connection()
-         try:
-             cursor = conn.cursor()
-             # Fetch yoga poses
-             cursor.execute('SELECT id, pose_name, description, duration_seconds, video_url FROM yoga_poses WHERE condition = ?', (condition,))
-             poses = cursor.fetchall()
-             if not poses:
-                 return jsonify({"error": f"No yoga poses found for condition: {condition}"}), 404
-
-             # Fetch diet plan
-             cursor.execute('SELECT day, meal_type, meal_description FROM diet_plans WHERE condition = ?', (condition,))
-             diet = cursor.fetchall()
-             if not diet:
-                 return jsonify({"error": f"No diet plan found for condition: {condition}"}), 404
-
-             # Format response
-             response = {
-                 "condition": condition,
-                 "yoga_plan": [{
-                     "id": pose[0],
-                     "pose_name": pose[1],
-                     "description": pose[2],
-                     "duration_seconds": pose[3],
-                     "video_url": pose[4]
-                 } for pose in poses],
-                 "diet_plan": [{
-                     "day": d[0],
-                     "meal_type": d[1],
-                     "meal_description": d[2]
-                 } for d in diet]
-             }
-             return jsonify(response), 200
-         except Error as e:
-             return jsonify({"error": str(e)}), 500
-         finally:
-             conn.close()
+    data = request.get_json()
+    condition = data.get('condition') if data else None
+    if not condition:
+        return jsonify({"error": "Condition is required in request body"}), 400
+    condition = condition.lower()  # Normalize to lowercase
+    conn = create_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM yoga_poses WHERE condition = ?", (condition,))
+    yoga_plan = cursor.fetchall()
+    cursor.execute("SELECT * FROM diet_plans WHERE condition = ?", (condition,))
+    diet_plan = cursor.fetchall()
+    conn.close()
+    if not yoga_plan:
+        return jsonify({"error": f"No yoga poses found for condition: {condition}"}), 404
+    return jsonify({
+        "condition": condition,
+        "yoga_plan": [{"id": p[0], "pose_name": p[2], "description": p[3], "duration_seconds": p[4], "video_url": p[5]} for p in yoga_plan],
+        "diet_plan": [{"id": d[0], "day": d[2], "meal_type": d[3], "meal_description": d[4]} for d in diet_plan]
+    })
 
 if __name__ == '__main__':
-         app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000)
